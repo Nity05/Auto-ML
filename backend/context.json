@@ -1,0 +1,73 @@
+{
+    "dataset_path": "s3://automl-datasets-nithish-001/datasets/uploaded/Heart_Disease_Prediction.csv",
+    "task": "classification",
+    "rows": 270,
+    "columns": [
+        "Age",
+        "Sex",
+        "Chest pain type",
+        "BP",
+        "Cholesterol",
+        "FBS over 120",
+        "EKG results",
+        "Max HR",
+        "Exercise angina",
+        "ST depression",
+        "Slope of ST",
+        "Number of vessels fluro",
+        "Thallium",
+        "Heart Disease"
+    ],
+    "dtypes": {
+        "Age": "int64",
+        "Sex": "int64",
+        "Chest pain type": "int64",
+        "BP": "int64",
+        "Cholesterol": "int64",
+        "FBS over 120": "int64",
+        "EKG results": "int64",
+        "Max HR": "int64",
+        "Exercise angina": "int64",
+        "ST depression": "float64",
+        "Slope of ST": "int64",
+        "Number of vessels fluro": "int64",
+        "Thallium": "int64",
+        "Heart Disease": "str"
+    },
+    "numeric_features": [
+        "Age",
+        "Sex",
+        "Chest pain type",
+        "BP",
+        "Cholesterol",
+        "FBS over 120",
+        "EKG results",
+        "Max HR",
+        "Exercise angina",
+        "ST depression",
+        "Slope of ST",
+        "Number of vessels fluro",
+        "Thallium"
+    ],
+    "categorical_features": [
+        "Heart Disease"
+    ],
+    "missing_values": {
+        "Age": 0,
+        "Sex": 0,
+        "Chest pain type": 0,
+        "BP": 0,
+        "Cholesterol": 0,
+        "FBS over 120": 0,
+        "EKG results": 0,
+        "Max HR": 0,
+        "Exercise angina": 0,
+        "ST depression": 0,
+        "Slope of ST": 0,
+        "Number of vessels fluro": 0,
+        "Thallium": 0,
+        "Heart Disease": 0
+    },
+    "target": "Sex",
+    "target_source": "auto"
+}
