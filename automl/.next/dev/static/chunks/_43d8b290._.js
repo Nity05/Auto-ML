@@ -25,14 +25,51 @@ function DatasetPage() {
     const [maxRows, setMaxRows] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(200000);
     const [features, setFeatures] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])("mixed");
     const [labelsRequired, setLabelsRequired] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(true);
-    const [finalJson, setFinalJson] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(null);
     const [datasets, setDatasets] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])([]);
+    const [trainingStarted, setTrainingStarted] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
+    const [results, setResults] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(null);
+    const [resultsLoading, setResultsLoading] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
+    const [analysisText, setAnalysisText] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(null);
+    const [analysisLoading, setAnalysisLoading] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
+    const [selectionLoading, setSelectionLoading] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(null);
+    const [currentJobName, setCurrentJobName] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(null);
+    const [generatedCode, setGeneratedCode] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(null);
     (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEffect"])({
         "DatasetPage.useEffect": ()=>{
             const data = JSON.parse(localStorage.getItem("questionnaire") || "{}");
             setConfigData(data);
+            // The user wants to select a fresh dataset. Polling should only start after they click Select.
+            localStorage.removeItem("trainingStarted");
+            setTrainingStarted(false);
+            setResults(null);
         }
     }["DatasetPage.useEffect"], []);
+    const checkOnce = ()=>{
+        fetch(`/api/results?t=${Date.now()}`).then((res)=>res.json()).then((data)=>{
+            if (data && (data.accuracy || data.r2_score)) {
+                setResults(data);
+                fetchAnalysis(data);
+            }
+        }).catch(()=>{});
+    };
+    const fetchAnalysis = (metrics)=>{
+        setAnalysisLoading(true);
+        fetch("/api/training/analysis", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                metrics,
+                task: configData.task
+            })
+        }).then((res)=>res.json()).then((data)=>{
+            if (data.status === "success") {
+                setAnalysisText(data.analysis);
+            }
+            setAnalysisLoading(false);
+        }).catch(()=>setAnalysisLoading(false));
+    };
     const handleSubmit = ()=>{
         const finalOutput = {
             ...configData,
@@ -45,8 +82,6 @@ function DatasetPage() {
                 labels_required: labelsRequired
             }
         };
-        setFinalJson(finalOutput);
-        console.log("Final JSON Output:", JSON.stringify(finalOutput, null, 2));
         fetch("/api/datasets/search", {
             method: "POST",
             headers: {
@@ -54,13 +89,13 @@ function DatasetPage() {
             },
             body: JSON.stringify(finalOutput)
         }).then((res)=>res.json()).then((data)=>{
-            console.log("Datasets received from backend:", data);
             setDatasets(data);
         }).catch((err)=>{
             console.error("Dataset fetch failed:", err);
         });
     };
     const handleSelect = (ds)=>{
+        setSelectionLoading(ds.ref);
         const finalOutput = {
             ...configData,
             dataset: {
@@ -73,8 +108,6 @@ function DatasetPage() {
             },
             ds: ds
         };
-        // console.log("Selecting:", ds)
-        console.log("Selecting:", finalOutput.ds.name);
         fetch("/api/datasets/select", {
             method: "POST",
             headers: {
@@ -82,788 +115,1034 @@ function DatasetPage() {
             },
             body: JSON.stringify(finalOutput)
         }).then((res)=>res.json()).then((data)=>{
+            if (data.status === "error") {
+                alert(`Error: ${data.message}`);
+                setSelectionLoading(null);
+                return;
+            }
             alert(`Selected: ${finalOutput.ds.name}`);
-            console.log("Selected Dataset:", data);
-        }).catch((err)=>console.error(err));
+            setResults(null);
+            setAnalysisText(null);
+            setTrainingStarted(true);
+            if (data.job_name) {
+                setCurrentJobName(data.job_name);
+                localStorage.setItem("currentJobName", data.job_name);
+            }
+            if (data.generated_code) {
+                setGeneratedCode(data.generated_code);
+            }
+            localStorage.setItem("trainingStarted", "true");
+            setSelectionLoading(null);
+            // Small delay to ensure S3 delete is propagated before we start looking for new results
+            setTimeout(()=>{
+                startPolling();
+            }, 3000);
+        }).catch((err)=>{
+            console.error(err);
+            setSelectionLoading(null);
+        });
+    };
+    const startPolling = ()=>{
+        setResultsLoading(true);
+        const pollResult = ()=>{
+            fetch(`/api/results?t=${Date.now()}`).then((res)=>res.json()).then((data)=>{
+                // Check if it's the old result or an error
+                if (data.status === "error" || !data.accuracy && !data.r2_score) {
+                    setTimeout(pollResult, 5000);
+                } else {
+                    setResults(data);
+                    setResultsLoading(false);
+                    fetchAnalysis(data);
+                }
+            }).catch(()=>{
+                setTimeout(pollResult, 5000);
+            });
+        };
+        pollResult();
     };
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-        className: "jsx-9a80317c69fca349" + " " + "min-h-screen bg-[#020617] text-slate-50 flex flex-col items-center p-8 relative overflow-hidden font-sans",
+        className: "jsx-7339ea23853c2e96" + " " + "min-h-screen bg-[#020617] text-slate-50 flex flex-col items-center p-8 relative overflow-hidden font-sans",
         children: [
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "jsx-9a80317c69fca349" + " " + "absolute top-[-15%] left-[-15%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[140px] animate-pulse"
+                className: "jsx-7339ea23853c2e96" + " " + "absolute top-[-15%] left-[-15%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[140px] animate-pulse"
             }, void 0, false, {
                 fileName: "[project]/app/Selection/page.tsx",
-                lineNumber: 83,
+                lineNumber: 164,
                 columnNumber: 13
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "jsx-9a80317c69fca349" + " " + "absolute bottom-[-15%] right-[-15%] w-[50%] h-[50%] bg-purple-600/10 rounded-full blur-[140px] animate-pulse delay-700"
+                className: "jsx-7339ea23853c2e96" + " " + "absolute bottom-[-15%] right-[-15%] w-[50%] h-[50%] bg-purple-600/10 rounded-full blur-[140px] animate-pulse delay-700"
             }, void 0, false, {
                 fileName: "[project]/app/Selection/page.tsx",
-                lineNumber: 84,
+                lineNumber: 165,
                 columnNumber: 13
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "jsx-9a80317c69fca349" + " " + "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none"
-            }, void 0, false, {
-                fileName: "[project]/app/Selection/page.tsx",
-                lineNumber: 85,
-                columnNumber: 13
-            }, this),
-            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "jsx-9a80317c69fca349" + " " + "relative z-10 w-full max-w-3xl flex flex-col items-center",
+                className: "jsx-7339ea23853c2e96" + " " + "relative z-10 w-full max-w-4xl flex flex-col items-center",
                 children: [
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "jsx-9a80317c69fca349" + " " + "mb-10 text-center relative",
+                        className: "jsx-7339ea23853c2e96" + " " + "mb-10 text-center relative",
                         children: [
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "jsx-9a80317c69fca349" + " " + "inline-block px-4 py-1.5 mb-4 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs font-bold tracking-widest uppercase",
+                                className: "jsx-7339ea23853c2e96" + " " + "inline-block px-4 py-1.5 mb-4 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs font-bold tracking-widest uppercase",
                                 children: "Step 2: Dataset Selection"
                             }, void 0, false, {
                                 fileName: "[project]/app/Selection/page.tsx",
-                                lineNumber: 89,
+                                lineNumber: 170,
                                 columnNumber: 21
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h1", {
-                                className: "jsx-9a80317c69fca349" + " " + "text-4xl font-extrabold tracking-tight mb-3",
+                                className: "jsx-7339ea23853c2e96" + " " + "text-4xl font-extrabold tracking-tight mb-3",
                                 children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                    className: "jsx-9a80317c69fca349" + " " + "bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400",
-                                    children: "Dataset Details"
+                                    className: "jsx-7339ea23853c2e96" + " " + "bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400",
+                                    children: "Dataset Intelligence"
                                 }, void 0, false, {
                                     fileName: "[project]/app/Selection/page.tsx",
-                                    lineNumber: 93,
+                                    lineNumber: 174,
                                     columnNumber: 25
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/app/Selection/page.tsx",
-                                lineNumber: 92,
+                                lineNumber: 173,
                                 columnNumber: 21
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                                className: "jsx-9a80317c69fca349" + " " + "text-slate-400 text-base max-w-md mx-auto leading-relaxed",
-                                children: "Configure your data source and processing requirements."
+                                className: "jsx-7339ea23853c2e96" + " " + "text-slate-400 text-base max-w-md mx-auto leading-relaxed",
+                                children: "Configure model parameters and source high-fidelity data."
                             }, void 0, false, {
                                 fileName: "[project]/app/Selection/page.tsx",
-                                lineNumber: 97,
+                                lineNumber: 178,
                                 columnNumber: 21
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/Selection/page.tsx",
-                        lineNumber: 88,
+                        lineNumber: 169,
                         columnNumber: 17
                     }, this),
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "jsx-9a80317c69fca349" + " " + "w-full bg-slate-900/40 backdrop-blur-2xl border border-slate-800/50 rounded-3xl shadow-[0_0_50px_-12px_rgba(0,0,0,0.5)] p-8 md:p-12 space-y-8 relative overflow-hidden group",
+                    !trainingStarted && !results && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                        className: "jsx-7339ea23853c2e96" + " " + "w-full bg-slate-900/40 backdrop-blur-2xl border border-slate-800/50 rounded-3xl p-8 md:p-12 space-y-8 relative overflow-hidden group",
                         children: [
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "jsx-9a80317c69fca349" + " " + "absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-purple-500/50 to-transparent"
+                                className: "jsx-7339ea23853c2e96" + " " + "absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-purple-500/50 to-transparent"
                             }, void 0, false, {
                                 fileName: "[project]/app/Selection/page.tsx",
-                                lineNumber: 104,
-                                columnNumber: 21
+                                lineNumber: 185,
+                                columnNumber: 25
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "jsx-9a80317c69fca349" + " " + "space-y-3 group/select",
+                                className: "jsx-7339ea23853c2e96" + " " + "grid grid-cols-1 md:grid-cols-2 gap-8",
                                 children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
-                                        className: "jsx-9a80317c69fca349" + " " + "text-xs font-bold text-slate-500 uppercase tracking-[0.2em] ml-1 transition-colors group-focus-within/select:text-blue-400",
-                                        children: "Data Source"
-                                    }, void 0, false, {
-                                        fileName: "[project]/app/Selection/page.tsx",
-                                        lineNumber: 108,
-                                        columnNumber: 25
-                                    }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "jsx-9a80317c69fca349" + " " + "relative",
+                                        className: "jsx-7339ea23853c2e96" + " " + "space-y-3",
                                         children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
+                                                className: "jsx-7339ea23853c2e96" + " " + "text-xs font-bold text-slate-500 uppercase tracking-[0.2em] ml-1",
+                                                children: "Data Source"
+                                            }, void 0, false, {
+                                                fileName: "[project]/app/Selection/page.tsx",
+                                                lineNumber: 189,
+                                                columnNumber: 33
+                                            }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("select", {
                                                 value: source,
                                                 onChange: (e)=>setSource(e.target.value),
-                                                className: "jsx-9a80317c69fca349" + " " + "w-full appearance-none bg-slate-800/30 border border-slate-700/50 rounded-2xl px-5 py-4 text-slate-200 outline-none focus:border-blue-500/50 focus:ring-4 focus:ring-blue-500/10 transition-all font-medium cursor-pointer",
+                                                className: "jsx-7339ea23853c2e96" + " " + "w-full bg-slate-800/30 border border-slate-700/50 rounded-2xl px-5 py-4 text-slate-200 outline-none focus:border-blue-500/50 transition-all cursor-pointer",
                                                 children: [
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
                                                         value: "auto_fetch",
-                                                        className: "jsx-9a80317c69fca349",
+                                                        className: "jsx-7339ea23853c2e96",
                                                         children: "🌐 Auto Fetch (Kaggle/OpenML)"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/Selection/page.tsx",
-                                                        lineNumber: 117,
-                                                        columnNumber: 33
+                                                        lineNumber: 195,
+                                                        columnNumber: 37
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
                                                         value: "manual",
-                                                        className: "jsx-9a80317c69fca349",
+                                                        className: "jsx-7339ea23853c2e96",
                                                         children: "📤 Manual Local Upload"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/Selection/page.tsx",
-                                                        lineNumber: 118,
-                                                        columnNumber: 33
+                                                        lineNumber: 196,
+                                                        columnNumber: 37
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/Selection/page.tsx",
-                                                lineNumber: 112,
-                                                columnNumber: 29
-                                            }, this),
-                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                                className: "jsx-9a80317c69fca349" + " " + "absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500",
-                                                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("svg", {
-                                                    xmlns: "http://www.w3.org/2000/svg",
-                                                    fill: "none",
-                                                    viewBox: "0 0 24 24",
-                                                    stroke: "currentColor",
-                                                    className: "jsx-9a80317c69fca349" + " " + "h-5 w-5",
-                                                    children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("path", {
-                                                        strokeLinecap: "round",
-                                                        strokeLinejoin: "round",
-                                                        strokeWidth: 2.5,
-                                                        d: "M19 9l-7 7-7-7",
-                                                        className: "jsx-9a80317c69fca349"
-                                                    }, void 0, false, {
-                                                        fileName: "[project]/app/Selection/page.tsx",
-                                                        lineNumber: 122,
-                                                        columnNumber: 37
-                                                    }, this)
-                                                }, void 0, false, {
-                                                    fileName: "[project]/app/Selection/page.tsx",
-                                                    lineNumber: 121,
-                                                    columnNumber: 33
-                                                }, this)
-                                            }, void 0, false, {
-                                                fileName: "[project]/app/Selection/page.tsx",
-                                                lineNumber: 120,
-                                                columnNumber: 29
+                                                lineNumber: 190,
+                                                columnNumber: 33
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/Selection/page.tsx",
-                                        lineNumber: 111,
-                                        columnNumber: 25
-                                    }, this)
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/app/Selection/page.tsx",
-                                lineNumber: 107,
-                                columnNumber: 21
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "jsx-9a80317c69fca349" + " " + "space-y-4",
-                                children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
-                                        className: "jsx-9a80317c69fca349" + " " + "text-xs font-bold text-slate-500 uppercase tracking-[0.2em] ml-1",
-                                        children: "Dataset Modality"
-                                    }, void 0, false, {
-                                        fileName: "[project]/app/Selection/page.tsx",
-                                        lineNumber: 130,
-                                        columnNumber: 25
+                                        lineNumber: 188,
+                                        columnNumber: 29
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "jsx-9a80317c69fca349" + " " + "flex flex-wrap gap-4",
+                                        className: "jsx-7339ea23853c2e96" + " " + "space-y-3",
                                         children: [
-                                            "tabular",
-                                            "image",
-                                            "text"
-                                        ].map((t)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
-                                                className: "jsx-9a80317c69fca349" + " " + `
-                                    flex items-center gap-3 px-5 py-3 rounded-2xl border cursor-pointer transition-all duration-300
-                                    ${type.includes(t) ? "bg-blue-600/10 border-blue-500/50 text-blue-200 shadow-sm" : "bg-slate-800/20 border-slate-800 text-slate-500 hover:border-slate-700"}
-                                `,
-                                                children: [
-                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                                        className: "jsx-9a80317c69fca349" + " " + "relative flex items-center justify-center",
-                                                        children: [
-                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
-                                                                type: "checkbox",
-                                                                checked: type.includes(t),
-                                                                onChange: (e)=>{
-                                                                    if (e.target.checked) setType([
-                                                                        ...type,
-                                                                        t
-                                                                    ]);
-                                                                    else setType(type.filter((x)=>x !== t));
-                                                                },
-                                                                className: "jsx-9a80317c69fca349" + " " + "sr-only"
-                                                            }, void 0, false, {
-                                                                fileName: "[project]/app/Selection/page.tsx",
-                                                                lineNumber: 142,
-                                                                columnNumber: 41
-                                                            }, this),
-                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                                                className: "jsx-9a80317c69fca349" + " " + `w-5 h-5 rounded-md border-2 transition-all ${type.includes(t) ? "bg-blue-500 border-blue-500" : "border-slate-700"}`,
-                                                                children: type.includes(t) && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("svg", {
-                                                                    xmlns: "http://www.w3.org/2000/svg",
-                                                                    viewBox: "0 0 20 20",
-                                                                    fill: "currentColor",
-                                                                    className: "jsx-9a80317c69fca349" + " " + "h-4 w-4 text-white mx-auto",
-                                                                    children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("path", {
-                                                                        fillRule: "evenodd",
-                                                                        d: "M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z",
-                                                                        clipRule: "evenodd",
-                                                                        className: "jsx-9a80317c69fca349"
-                                                                    }, void 0, false, {
-                                                                        fileName: "[project]/app/Selection/page.tsx",
-                                                                        lineNumber: 154,
-                                                                        columnNumber: 53
-                                                                    }, this)
-                                                                }, void 0, false, {
-                                                                    fileName: "[project]/app/Selection/page.tsx",
-                                                                    lineNumber: 153,
-                                                                    columnNumber: 49
-                                                                }, this)
-                                                            }, void 0, false, {
-                                                                fileName: "[project]/app/Selection/page.tsx",
-                                                                lineNumber: 151,
-                                                                columnNumber: 41
-                                                            }, this)
-                                                        ]
-                                                    }, void 0, true, {
-                                                        fileName: "[project]/app/Selection/page.tsx",
-                                                        lineNumber: 141,
-                                                        columnNumber: 37
-                                                    }, this),
-                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                                        className: "jsx-9a80317c69fca349" + " " + "capitalize text-sm font-bold tracking-wide",
-                                                        children: t
-                                                    }, void 0, false, {
-                                                        fileName: "[project]/app/Selection/page.tsx",
-                                                        lineNumber: 159,
-                                                        columnNumber: 37
-                                                    }, this)
-                                                ]
-                                            }, t, true, {
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
+                                                className: "jsx-7339ea23853c2e96" + " " + "text-xs font-bold text-slate-500 uppercase tracking-[0.2em] ml-1",
+                                                children: "Feature Schema"
+                                            }, void 0, false, {
                                                 fileName: "[project]/app/Selection/page.tsx",
-                                                lineNumber: 135,
+                                                lineNumber: 200,
                                                 columnNumber: 33
-                                            }, this))
-                                    }, void 0, false, {
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
+                                                type: "text",
+                                                value: features,
+                                                onChange: (e)=>setFeatures(e.target.value),
+                                                placeholder: "e.g. mixed, categorical",
+                                                className: "jsx-7339ea23853c2e96" + " " + "w-full bg-slate-800/30 border border-slate-700/50 rounded-2xl px-5 py-4 text-slate-200 outline-none focus:border-blue-500/50 transition-all font-medium"
+                                            }, void 0, false, {
+                                                fileName: "[project]/app/Selection/page.tsx",
+                                                lineNumber: 201,
+                                                columnNumber: 33
+                                            }, this)
+                                        ]
+                                    }, void 0, true, {
                                         fileName: "[project]/app/Selection/page.tsx",
-                                        lineNumber: 133,
-                                        columnNumber: 25
+                                        lineNumber: 199,
+                                        columnNumber: 29
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/Selection/page.tsx",
-                                lineNumber: 129,
-                                columnNumber: 21
+                                lineNumber: 187,
+                                columnNumber: 25
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "jsx-9a80317c69fca349" + " " + "grid grid-cols-2 gap-8",
+                                className: "jsx-7339ea23853c2e96" + " " + "grid grid-cols-2 gap-8",
                                 children: [
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "jsx-9a80317c69fca349" + " " + "space-y-3 group/input",
+                                        className: "jsx-7339ea23853c2e96" + " " + "space-y-3",
                                         children: [
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
-                                                className: "jsx-9a80317c69fca349" + " " + "text-xs font-bold text-slate-500 uppercase tracking-[0.2em] ml-1 group-focus-within/input:text-purple-400 transition-colors",
-                                                children: "Minimum Rows"
+                                                className: "jsx-7339ea23853c2e96" + " " + "text-xs font-bold text-slate-500 uppercase tracking-[0.2em] ml-1",
+                                                children: "Min Rows"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/Selection/page.tsx",
-                                                lineNumber: 168,
-                                                columnNumber: 29
+                                                lineNumber: 213,
+                                                columnNumber: 33
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
                                                 type: "number",
                                                 value: minRows,
                                                 onChange: (e)=>setMinRows(Number(e.target.value)),
-                                                className: "jsx-9a80317c69fca349" + " " + "w-full bg-slate-800/30 border border-slate-700/50 rounded-2xl px-5 py-4 text-slate-200 outline-none focus:border-purple-500/50 focus:ring-4 focus:ring-purple-500/10 transition-all font-medium"
+                                                className: "jsx-7339ea23853c2e96" + " " + "w-full bg-slate-800/30 border border-slate-700/50 rounded-2xl px-5 py-4 text-slate-200 outline-none focus:border-purple-500/50 transition-all font-medium"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/Selection/page.tsx",
-                                                lineNumber: 169,
-                                                columnNumber: 29
+                                                lineNumber: 214,
+                                                columnNumber: 33
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/Selection/page.tsx",
-                                        lineNumber: 167,
-                                        columnNumber: 25
+                                        lineNumber: 212,
+                                        columnNumber: 29
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "jsx-9a80317c69fca349" + " " + "space-y-3 group/input",
+                                        className: "jsx-7339ea23853c2e96" + " " + "space-y-3",
                                         children: [
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
-                                                className: "jsx-9a80317c69fca349" + " " + "text-xs font-bold text-slate-500 uppercase tracking-[0.2em] ml-1 group-focus-within/input:text-purple-400 transition-colors",
-                                                children: "Maximum Rows"
+                                                className: "jsx-7339ea23853c2e96" + " " + "text-xs font-bold text-slate-500 uppercase tracking-[0.2em] ml-1",
+                                                children: "Max Rows"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/Selection/page.tsx",
-                                                lineNumber: 177,
-                                                columnNumber: 29
+                                                lineNumber: 222,
+                                                columnNumber: 33
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
                                                 type: "number",
                                                 value: maxRows,
                                                 onChange: (e)=>setMaxRows(Number(e.target.value)),
-                                                className: "jsx-9a80317c69fca349" + " " + "w-full bg-slate-800/30 border border-slate-700/50 rounded-2xl px-5 py-4 text-slate-200 outline-none focus:border-purple-500/50 focus:ring-4 focus:ring-purple-500/10 transition-all font-medium"
+                                                className: "jsx-7339ea23853c2e96" + " " + "w-full bg-slate-800/30 border border-slate-700/50 rounded-2xl px-5 py-4 text-slate-200 outline-none focus:border-purple-500/50 transition-all font-medium"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/Selection/page.tsx",
-                                                lineNumber: 178,
-                                                columnNumber: 29
+                                                lineNumber: 223,
+                                                columnNumber: 33
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/Selection/page.tsx",
-                                        lineNumber: 176,
-                                        columnNumber: 25
+                                        lineNumber: 221,
+                                        columnNumber: 29
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/Selection/page.tsx",
-                                lineNumber: 166,
-                                columnNumber: 21
+                                lineNumber: 211,
+                                columnNumber: 25
                             }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "jsx-9a80317c69fca349" + " " + "space-y-3 group/input",
-                                children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
-                                        className: "jsx-9a80317c69fca349" + " " + "text-xs font-bold text-slate-500 uppercase tracking-[0.2em] ml-1 group-focus-within/input:text-blue-400 transition-colors",
-                                        children: "Feature Schema"
-                                    }, void 0, false, {
-                                        fileName: "[project]/app/Selection/page.tsx",
-                                        lineNumber: 189,
-                                        columnNumber: 25
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "jsx-9a80317c69fca349" + " " + "relative",
-                                        children: [
-                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
-                                                type: "text",
-                                                value: features,
-                                                onChange: (e)=>setFeatures(e.target.value),
-                                                placeholder: "e.g. mixed, categorical, numerical",
-                                                className: "jsx-9a80317c69fca349" + " " + "w-full bg-slate-800/30 border border-slate-700/50 rounded-2xl px-5 py-4 text-slate-200 outline-none focus:border-blue-500/50 focus:ring-4 focus:ring-blue-500/10 transition-all font-medium"
-                                            }, void 0, false, {
-                                                fileName: "[project]/app/Selection/page.tsx",
-                                                lineNumber: 191,
-                                                columnNumber: 29
-                                            }, this),
-                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                                className: "jsx-9a80317c69fca349" + " " + "absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none",
-                                                children: "📊"
-                                            }, void 0, false, {
-                                                fileName: "[project]/app/Selection/page.tsx",
-                                                lineNumber: 198,
-                                                columnNumber: 29
-                                            }, this)
-                                        ]
-                                    }, void 0, true, {
-                                        fileName: "[project]/app/Selection/page.tsx",
-                                        lineNumber: 190,
-                                        columnNumber: 25
-                                    }, this)
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/app/Selection/page.tsx",
-                                lineNumber: 188,
-                                columnNumber: 21
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
-                                className: "jsx-9a80317c69fca349" + " " + "flex items-center gap-4 cursor-pointer group/label p-4 rounded-2xl bg-slate-800/20 border border-slate-800 hover:border-slate-700 transition-all",
-                                children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "jsx-9a80317c69fca349" + " " + "relative flex items-center",
-                                        children: [
-                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
-                                                type: "checkbox",
-                                                id: "labels",
-                                                checked: labelsRequired,
-                                                onChange: (e)=>setLabelsRequired(e.target.checked),
-                                                className: "jsx-9a80317c69fca349" + " " + "sr-only"
-                                            }, void 0, false, {
-                                                fileName: "[project]/app/Selection/page.tsx",
-                                                lineNumber: 207,
-                                                columnNumber: 29
-                                            }, this),
-                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                                className: "jsx-9a80317c69fca349" + " " + `w-12 h-6 rounded-full transition-all duration-300 flex items-center px-1 ${labelsRequired ? "bg-blue-600" : "bg-slate-700"}`,
-                                                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                                    className: "jsx-9a80317c69fca349" + " " + `w-4 h-4 rounded-full bg-white transition-all duration-300 transform ${labelsRequired ? "translate-x-6" : "translate-x-0"}`
-                                                }, void 0, false, {
-                                                    fileName: "[project]/app/Selection/page.tsx",
-                                                    lineNumber: 215,
-                                                    columnNumber: 33
-                                                }, this)
-                                            }, void 0, false, {
-                                                fileName: "[project]/app/Selection/page.tsx",
-                                                lineNumber: 214,
-                                                columnNumber: 29
-                                            }, this)
-                                        ]
-                                    }, void 0, true, {
-                                        fileName: "[project]/app/Selection/page.tsx",
-                                        lineNumber: 206,
-                                        columnNumber: 25
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                        className: "jsx-9a80317c69fca349" + " " + `text-sm font-bold uppercase tracking-widest ${labelsRequired ? "text-blue-400" : "text-slate-500"}`,
-                                        children: "Require Labeled Ground Truth"
-                                    }, void 0, false, {
-                                        fileName: "[project]/app/Selection/page.tsx",
-                                        lineNumber: 218,
-                                        columnNumber: 25
-                                    }, this)
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/app/Selection/page.tsx",
-                                lineNumber: 205,
-                                columnNumber: 21
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "jsx-9a80317c69fca349" + " " + "pt-4",
-                                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
-                                    onClick: handleSubmit,
-                                    className: "jsx-9a80317c69fca349" + " " + "group relative w-full bg-gradient-to-br from-purple-600 to-blue-700 hover:from-purple-500 hover:to-blue-600 text-white font-bold py-5 rounded-2xl shadow-[0_10px_30px_-10px_rgba(124,58,237,0.5)] transform transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] overflow-hidden",
-                                    children: [
-                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                            className: "jsx-9a80317c69fca349" + " " + "absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]"
-                                        }, void 0, false, {
-                                            fileName: "[project]/app/Selection/page.tsx",
-                                            lineNumber: 229,
-                                            columnNumber: 29
-                                        }, this),
-                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                            className: "jsx-9a80317c69fca349" + " " + "flex items-center justify-center gap-3 relative z-10",
-                                            children: [
-                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                                    className: "jsx-9a80317c69fca349" + " " + "tracking-widest uppercase text-sm",
-                                                    children: "Query Model Repositories"
-                                                }, void 0, false, {
-                                                    fileName: "[project]/app/Selection/page.tsx",
-                                                    lineNumber: 231,
-                                                    columnNumber: 33
-                                                }, this),
-                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("svg", {
-                                                    xmlns: "http://www.w3.org/2000/svg",
-                                                    fill: "none",
-                                                    viewBox: "0 0 24 24",
-                                                    stroke: "currentColor",
-                                                    className: "jsx-9a80317c69fca349" + " " + "h-5 w-5 group-hover:rotate-12 transition-transform",
-                                                    children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("path", {
-                                                        strokeLinecap: "round",
-                                                        strokeLinejoin: "round",
-                                                        strokeWidth: 2.5,
-                                                        d: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z",
-                                                        className: "jsx-9a80317c69fca349"
-                                                    }, void 0, false, {
-                                                        fileName: "[project]/app/Selection/page.tsx",
-                                                        lineNumber: 233,
-                                                        columnNumber: 37
-                                                    }, this)
-                                                }, void 0, false, {
-                                                    fileName: "[project]/app/Selection/page.tsx",
-                                                    lineNumber: 232,
-                                                    columnNumber: 33
-                                                }, this)
-                                            ]
-                                        }, void 0, true, {
-                                            fileName: "[project]/app/Selection/page.tsx",
-                                            lineNumber: 230,
-                                            columnNumber: 29
-                                        }, this)
-                                    ]
-                                }, void 0, true, {
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                onClick: handleSubmit,
+                                className: "jsx-7339ea23853c2e96" + " " + "group relative w-full bg-gradient-to-br from-purple-600 to-blue-700 text-white font-bold py-5 rounded-2xl shadow-xl transform transition-all hover:scale-[1.02] active:scale-[0.98] overflow-hidden",
+                                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                    className: "jsx-7339ea23853c2e96" + " " + "tracking-widest uppercase text-sm",
+                                    children: "Query Repositories"
+                                }, void 0, false, {
                                     fileName: "[project]/app/Selection/page.tsx",
-                                    lineNumber: 225,
-                                    columnNumber: 25
+                                    lineNumber: 236,
+                                    columnNumber: 29
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/app/Selection/page.tsx",
-                                lineNumber: 224,
-                                columnNumber: 21
+                                lineNumber: 232,
+                                columnNumber: 25
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/Selection/page.tsx",
-                        lineNumber: 102,
-                        columnNumber: 17
+                        lineNumber: 184,
+                        columnNumber: 21
                     }, this),
-                    datasets.length > 0 && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "jsx-9a80317c69fca349" + " " + "w-full mt-16 space-y-6 pb-20",
+                    datasets.length > 0 && !trainingStarted && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                        className: "jsx-7339ea23853c2e96" + " " + "w-full mt-16 space-y-6",
                         children: [
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "jsx-9a80317c69fca349" + " " + "flex items-center justify-between",
-                                children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
-                                        className: "jsx-9a80317c69fca349" + " " + "text-2xl font-bold tracking-tight",
-                                        children: "Available Datasets"
-                                    }, void 0, false, {
-                                        fileName: "[project]/app/Selection/page.tsx",
-                                        lineNumber: 244,
-                                        columnNumber: 29
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                        className: "jsx-9a80317c69fca349" + " " + "text-xs font-bold text-slate-500 uppercase tracking-widest bg-slate-800/50 px-3 py-1 rounded-full border border-slate-700",
-                                        children: [
-                                            datasets.length,
-                                            " Results Found"
-                                        ]
-                                    }, void 0, true, {
-                                        fileName: "[project]/app/Selection/page.tsx",
-                                        lineNumber: 245,
-                                        columnNumber: 29
-                                    }, this)
-                                ]
-                            }, void 0, true, {
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
+                                className: "jsx-7339ea23853c2e96" + " " + "text-2xl font-bold tracking-tight",
+                                children: "Available Datasets"
+                            }, void 0, false, {
                                 fileName: "[project]/app/Selection/page.tsx",
-                                lineNumber: 243,
+                                lineNumber: 244,
                                 columnNumber: 25
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "jsx-9a80317c69fca349" + " " + "grid gap-5",
+                                className: "jsx-7339ea23853c2e96" + " " + "grid gap-5",
                                 children: datasets.map((ds, i)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "jsx-9a80317c69fca349" + " " + "group/result bg-slate-900/40 backdrop-blur-xl border border-slate-800/50 p-6 md:p-8 rounded-3xl flex flex-col md:flex-row justify-between items-start md:items-center hover:bg-slate-800/40 hover:border-blue-500/30 transition-all duration-300 gap-6",
+                                        className: "jsx-7339ea23853c2e96" + " " + "bg-slate-900/40 backdrop-blur-xl border border-slate-800/50 p-6 md:p-8 rounded-3xl flex justify-between items-center group/item hover:border-blue-500/30 transition-all",
                                         children: [
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                                className: "jsx-9a80317c69fca349" + " " + "flex-1 space-y-4",
+                                                className: "jsx-7339ea23853c2e96" + " " + "space-y-2",
                                                 children: [
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
+                                                        className: "jsx-7339ea23853c2e96" + " " + "text-xl font-extrabold text-blue-400",
+                                                        children: ds.name
+                                                    }, void 0, false, {
+                                                        fileName: "[project]/app/Selection/page.tsx",
+                                                        lineNumber: 249,
+                                                        columnNumber: 41
+                                                    }, this),
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                                        className: "jsx-7339ea23853c2e96" + " " + "text-sm text-slate-400 line-clamp-1 max-w-xl",
+                                                        children: ds.desc
+                                                    }, void 0, false, {
+                                                        fileName: "[project]/app/Selection/page.tsx",
+                                                        lineNumber: 250,
+                                                        columnNumber: 41
+                                                    }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                                        className: "jsx-9a80317c69fca349" + " " + "flex items-center gap-3",
+                                                        className: "jsx-7339ea23853c2e96" + " " + "flex gap-4 text-xs font-bold text-slate-500",
                                                         children: [
-                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("a", {
-                                                                href: ds.url || "#",
-                                                                target: "_blank",
-                                                                rel: "noreferrer",
-                                                                className: "jsx-9a80317c69fca349" + " " + "text-xl font-extrabold text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-2",
+                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                                className: "jsx-7339ea23853c2e96",
                                                                 children: [
-                                                                    ds.name,
-                                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("svg", {
-                                                                        xmlns: "http://www.w3.org/2000/svg",
-                                                                        fill: "none",
-                                                                        viewBox: "0 0 24 24",
-                                                                        stroke: "currentColor",
-                                                                        className: "jsx-9a80317c69fca349" + " " + "h-4 w-4 opacity-0 group-hover/result:opacity-100 transition-opacity",
-                                                                        children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("path", {
-                                                                            strokeLinecap: "round",
-                                                                            strokeLinejoin: "round",
-                                                                            strokeWidth: 2.5,
-                                                                            d: "M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14",
-                                                                            className: "jsx-9a80317c69fca349"
-                                                                        }, void 0, false, {
-                                                                            fileName: "[project]/app/Selection/page.tsx",
-                                                                            lineNumber: 263,
-                                                                            columnNumber: 53
-                                                                        }, this)
-                                                                    }, void 0, false, {
-                                                                        fileName: "[project]/app/Selection/page.tsx",
-                                                                        lineNumber: 262,
-                                                                        columnNumber: 49
-                                                                    }, this)
+                                                                    "📥 ",
+                                                                    ds.downloads?.toLocaleString()
                                                                 ]
                                                             }, void 0, true, {
                                                                 fileName: "[project]/app/Selection/page.tsx",
-                                                                lineNumber: 255,
+                                                                lineNumber: 252,
                                                                 columnNumber: 45
                                                             }, this),
                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                                                className: "jsx-9a80317c69fca349" + " " + "text-[10px] font-black bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded border border-blue-500/20 uppercase tracking-widest",
-                                                                children: ds.source
-                                                            }, void 0, false, {
-                                                                fileName: "[project]/app/Selection/page.tsx",
-                                                                lineNumber: 266,
-                                                                columnNumber: 45
-                                                            }, this)
-                                                        ]
-                                                    }, void 0, true, {
-                                                        fileName: "[project]/app/Selection/page.tsx",
-                                                        lineNumber: 254,
-                                                        columnNumber: 41
-                                                    }, this),
-                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                                        className: "jsx-9a80317c69fca349" + " " + "flex items-center gap-3",
-                                                        children: [
-                                                            ds.desc,
-                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("svg", {
-                                                                xmlns: "http://www.w3.org/2000/svg",
-                                                                fill: "none",
-                                                                viewBox: "0 0 24 24",
-                                                                stroke: "currentColor",
-                                                                className: "jsx-9a80317c69fca349" + " " + "h-4 w-4 opacity-0 group-hover/result:opacity-100 transition-opacity",
-                                                                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("path", {
-                                                                    strokeLinecap: "round",
-                                                                    strokeLinejoin: "round",
-                                                                    strokeWidth: 2.5,
-                                                                    d: "M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14",
-                                                                    className: "jsx-9a80317c69fca349"
-                                                                }, void 0, false, {
-                                                                    fileName: "[project]/app/Selection/page.tsx",
-                                                                    lineNumber: 274,
-                                                                    columnNumber: 49
-                                                                }, this)
-                                                            }, void 0, false, {
-                                                                fileName: "[project]/app/Selection/page.tsx",
-                                                                lineNumber: 273,
-                                                                columnNumber: 45
-                                                            }, this)
-                                                        ]
-                                                    }, void 0, true, {
-                                                        fileName: "[project]/app/Selection/page.tsx",
-                                                        lineNumber: 270,
-                                                        columnNumber: 41
-                                                    }, this),
-                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                                        className: "jsx-9a80317c69fca349" + " " + "flex flex-wrap gap-8 text-sm",
-                                                        children: [
-                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                                                className: "jsx-9a80317c69fca349" + " " + "space-y-2",
+                                                                className: "jsx-7339ea23853c2e96",
                                                                 children: [
-                                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                                                        className: "jsx-9a80317c69fca349" + " " + "text-[10px] font-bold text-slate-500 uppercase tracking-widest block",
-                                                                        children: "Usability Score"
-                                                                    }, void 0, false, {
-                                                                        fileName: "[project]/app/Selection/page.tsx",
-                                                                        lineNumber: 281,
-                                                                        columnNumber: 49
-                                                                    }, this),
-                                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                                                        className: "jsx-9a80317c69fca349" + " " + "flex items-center gap-3",
-                                                                        children: [
-                                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                                                                className: "jsx-9a80317c69fca349" + " " + "w-24 h-1.5 bg-slate-800 rounded-full overflow-hidden",
-                                                                                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                                                                    style: {
-                                                                                        width: `${(ds.usability || 0) * 100}%`
-                                                                                    },
-                                                                                    className: "jsx-9a80317c69fca349" + " " + "h-full bg-gradient-to-r from-green-500 to-emerald-400 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.3)]"
-                                                                                }, void 0, false, {
-                                                                                    fileName: "[project]/app/Selection/page.tsx",
-                                                                                    lineNumber: 284,
-                                                                                    columnNumber: 57
-                                                                                }, this)
-                                                                            }, void 0, false, {
-                                                                                fileName: "[project]/app/Selection/page.tsx",
-                                                                                lineNumber: 283,
-                                                                                columnNumber: 53
-                                                                            }, this),
-                                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                                                                className: "jsx-9a80317c69fca349" + " " + "font-mono text-xs font-bold text-slate-400",
-                                                                                children: (ds.usability || 0).toFixed(2)
-                                                                            }, void 0, false, {
-                                                                                fileName: "[project]/app/Selection/page.tsx",
-                                                                                lineNumber: 289,
-                                                                                columnNumber: 53
-                                                                            }, this)
-                                                                        ]
-                                                                    }, void 0, true, {
-                                                                        fileName: "[project]/app/Selection/page.tsx",
-                                                                        lineNumber: 282,
-                                                                        columnNumber: 49
-                                                                    }, this)
+                                                                    "⭐ ",
+                                                                    ds.votes
                                                                 ]
                                                             }, void 0, true, {
                                                                 fileName: "[project]/app/Selection/page.tsx",
-                                                                lineNumber: 280,
+                                                                lineNumber: 253,
                                                                 columnNumber: 45
                                                             }, this),
-                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                                                className: "jsx-9a80317c69fca349" + " " + "space-y-1",
+                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                                className: "jsx-7339ea23853c2e96" + " " + "text-emerald-400",
                                                                 children: [
-                                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                                                        className: "jsx-9a80317c69fca349" + " " + "text-[10px] font-bold text-slate-500 uppercase tracking-widest block",
-                                                                        children: "Reach"
-                                                                    }, void 0, false, {
-                                                                        fileName: "[project]/app/Selection/page.tsx",
-                                                                        lineNumber: 294,
-                                                                        columnNumber: 49
-                                                                    }, this),
-                                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                                                        className: "jsx-9a80317c69fca349" + " " + "flex items-center gap-2",
-                                                                        children: [
-                                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                                                                className: "jsx-9a80317c69fca349" + " " + "text-xs font-bold text-slate-300",
-                                                                                children: [
-                                                                                    "📥 ",
-                                                                                    (ds.downloads || 0).toLocaleString()
-                                                                                ]
-                                                                            }, void 0, true, {
-                                                                                fileName: "[project]/app/Selection/page.tsx",
-                                                                                lineNumber: 296,
-                                                                                columnNumber: 53
-                                                                            }, this),
-                                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                                                                className: "jsx-9a80317c69fca349" + " " + "text-slate-700",
-                                                                                children: "|"
-                                                                            }, void 0, false, {
-                                                                                fileName: "[project]/app/Selection/page.tsx",
-                                                                                lineNumber: 297,
-                                                                                columnNumber: 53
-                                                                            }, this),
-                                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                                                                className: "jsx-9a80317c69fca349" + " " + "text-xs font-bold text-slate-300",
-                                                                                children: [
-                                                                                    "⭐ ",
-                                                                                    ds.votes
-                                                                                ]
-                                                                            }, void 0, true, {
-                                                                                fileName: "[project]/app/Selection/page.tsx",
-                                                                                lineNumber: 298,
-                                                                                columnNumber: 53
-                                                                            }, this)
-                                                                        ]
-                                                                    }, void 0, true, {
-                                                                        fileName: "[project]/app/Selection/page.tsx",
-                                                                        lineNumber: 295,
-                                                                        columnNumber: 49
-                                                                    }, this)
+                                                                    "Usability: ",
+                                                                    (ds.usability * 10).toFixed(1)
                                                                 ]
                                                             }, void 0, true, {
                                                                 fileName: "[project]/app/Selection/page.tsx",
-                                                                lineNumber: 293,
+                                                                lineNumber: 254,
                                                                 columnNumber: 45
                                                             }, this)
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/app/Selection/page.tsx",
-                                                        lineNumber: 279,
+                                                        lineNumber: 251,
                                                         columnNumber: 41
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/Selection/page.tsx",
-                                                lineNumber: 253,
+                                                lineNumber: 248,
                                                 columnNumber: 37
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
                                                 onClick: ()=>handleSelect(ds),
-                                                className: "jsx-9a80317c69fca349" + " " + "w-full md:w-auto px-8 py-4 bg-slate-100 hover:bg-white text-slate-950 rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-xl hover:shadow-white/10 active:scale-95",
-                                                children: "Deploy Data"
+                                                disabled: selectionLoading !== null,
+                                                className: "jsx-7339ea23853c2e96" + " " + `px-8 py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all ${selectionLoading === ds.ref ? "bg-slate-800 text-slate-500 cursor-not-allowed" : "bg-white text-slate-950 hover:scale-105"}`,
+                                                children: selectionLoading === ds.ref ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                    className: "jsx-7339ea23853c2e96" + " " + "flex items-center gap-2",
+                                                    children: [
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                            className: "jsx-7339ea23853c2e96" + " " + "w-4 h-4 border-2 border-slate-600 border-t-blue-500 rounded-full animate-spin"
+                                                        }, void 0, false, {
+                                                            fileName: "[project]/app/Selection/page.tsx",
+                                                            lineNumber: 268,
+                                                            columnNumber: 49
+                                                        }, this),
+                                                        "Deploying..."
+                                                    ]
+                                                }, void 0, true, {
+                                                    fileName: "[project]/app/Selection/page.tsx",
+                                                    lineNumber: 267,
+                                                    columnNumber: 45
+                                                }, this) : "Select"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/Selection/page.tsx",
-                                                lineNumber: 304,
+                                                lineNumber: 257,
                                                 columnNumber: 37
                                             }, this)
                                         ]
                                     }, i, true, {
                                         fileName: "[project]/app/Selection/page.tsx",
-                                        lineNumber: 252,
+                                        lineNumber: 247,
                                         columnNumber: 33
                                     }, this))
                             }, void 0, false, {
                                 fileName: "[project]/app/Selection/page.tsx",
-                                lineNumber: 250,
+                                lineNumber: 245,
                                 columnNumber: 25
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/Selection/page.tsx",
-                        lineNumber: 242,
+                        lineNumber: 243,
+                        columnNumber: 21
+                    }, this),
+                    (trainingStarted || results) && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                        className: "jsx-7339ea23853c2e96" + " " + "w-full mt-16 space-y-8 pb-24",
+                        children: [
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                className: "jsx-7339ea23853c2e96" + " " + "flex flex-col items-center text-center space-y-4",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "jsx-7339ea23853c2e96" + " " + "inline-block px-4 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-black tracking-[0.3em] uppercase",
+                                        children: results ? "Processing Complete" : "SageMaker Engine Running"
+                                    }, void 0, false, {
+                                        fileName: "[project]/app/Selection/page.tsx",
+                                        lineNumber: 283,
+                                        columnNumber: 29
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
+                                        className: "jsx-7339ea23853c2e96" + " " + "text-3xl font-extrabold tracking-tight",
+                                        children: results ? "Model Intelligence Hub" : "Architecting Your Intelligence"
+                                    }, void 0, false, {
+                                        fileName: "[project]/app/Selection/page.tsx",
+                                        lineNumber: 286,
+                                        columnNumber: 29
+                                    }, this)
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/app/Selection/page.tsx",
+                                lineNumber: 282,
+                                columnNumber: 25
+                            }, this),
+                            resultsLoading && !results && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                className: "jsx-7339ea23853c2e96" + " " + "flex flex-col items-center justify-center py-10 space-y-8 animate-in fade-in duration-500",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "jsx-7339ea23853c2e96" + " " + "relative",
+                                        children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "jsx-7339ea23853c2e96" + " " + "w-20 h-20 rounded-full border-4 border-slate-800 border-t-blue-500 animate-spin"
+                                            }, void 0, false, {
+                                                fileName: "[project]/app/Selection/page.tsx",
+                                                lineNumber: 294,
+                                                columnNumber: 37
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "jsx-7339ea23853c2e96" + " " + "absolute inset-0 flex items-center justify-center text-xl",
+                                                children: "⏳"
+                                            }, void 0, false, {
+                                                fileName: "[project]/app/Selection/page.tsx",
+                                                lineNumber: 295,
+                                                columnNumber: 37
+                                            }, this)
+                                        ]
+                                    }, void 0, true, {
+                                        fileName: "[project]/app/Selection/page.tsx",
+                                        lineNumber: 293,
+                                        columnNumber: 33
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "jsx-7339ea23853c2e96" + " " + "text-center space-y-2",
+                                        children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "jsx-7339ea23853c2e96" + " " + "text-slate-300 text-sm font-black uppercase tracking-[0.3em] animate-pulse",
+                                                children: "Awaiting S3 Manifest..."
+                                            }, void 0, false, {
+                                                fileName: "[project]/app/Selection/page.tsx",
+                                                lineNumber: 298,
+                                                columnNumber: 37
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                                className: "jsx-7339ea23853c2e96" + " " + "text-slate-500 text-[10px] uppercase font-bold tracking-widest max-w-[200px]",
+                                                children: "SageMaker instance is provisioning. This may take 3-5 minutes."
+                                            }, void 0, false, {
+                                                fileName: "[project]/app/Selection/page.tsx",
+                                                lineNumber: 299,
+                                                columnNumber: 37
+                                            }, this),
+                                            currentJobName && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "jsx-7339ea23853c2e96" + " " + "mt-4 p-3 bg-slate-900/60 rounded-xl border border-slate-800",
+                                                children: [
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                        className: "jsx-7339ea23853c2e96" + " " + "text-[8px] text-slate-500 font-bold uppercase mb-1",
+                                                        children: "Active SageMaker Job"
+                                                    }, void 0, false, {
+                                                        fileName: "[project]/app/Selection/page.tsx",
+                                                        lineNumber: 302,
+                                                        columnNumber: 45
+                                                    }, this),
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                        className: "jsx-7339ea23853c2e96" + " " + "text-[10px] text-blue-400 font-mono",
+                                                        children: currentJobName
+                                                    }, void 0, false, {
+                                                        fileName: "[project]/app/Selection/page.tsx",
+                                                        lineNumber: 303,
+                                                        columnNumber: 45
+                                                    }, this)
+                                                ]
+                                            }, void 0, true, {
+                                                fileName: "[project]/app/Selection/page.tsx",
+                                                lineNumber: 301,
+                                                columnNumber: 41
+                                            }, this)
+                                        ]
+                                    }, void 0, true, {
+                                        fileName: "[project]/app/Selection/page.tsx",
+                                        lineNumber: 297,
+                                        columnNumber: 33
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                        onClick: ()=>{
+                                            localStorage.removeItem("trainingStarted");
+                                            setResults(null);
+                                            setTrainingStarted(false);
+                                            setResultsLoading(false);
+                                        },
+                                        className: "jsx-7339ea23853c2e96" + " " + "mt-8 px-6 py-2 border border-slate-800 text-slate-500 text-[10px] font-black uppercase tracking-widest rounded-full hover:bg-slate-800 hover:text-slate-300 transition-all",
+                                        children: "← Back to Selection (Reset)"
+                                    }, void 0, false, {
+                                        fileName: "[project]/app/Selection/page.tsx",
+                                        lineNumber: 309,
+                                        columnNumber: 33
+                                    }, this)
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/app/Selection/page.tsx",
+                                lineNumber: 292,
+                                columnNumber: 29
+                            }, this),
+                            results && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                className: "jsx-7339ea23853c2e96" + " " + "space-y-8 animate-in fade-in slide-in-from-bottom-10 duration-1000",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "jsx-7339ea23853c2e96" + " " + "grid grid-cols-1 md:grid-cols-3 gap-6",
+                                        children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "jsx-7339ea23853c2e96" + " " + "bg-slate-900/40 backdrop-blur-2xl border border-slate-800/50 rounded-3xl p-8 flex flex-col items-center justify-center space-y-4",
+                                                children: results.accuracy ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Fragment"], {
+                                                    children: [
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                            className: "jsx-7339ea23853c2e96" + " " + "text-4xl font-black text-white",
+                                                            children: [
+                                                                (results.accuracy * 100).toFixed(1),
+                                                                "%"
+                                                            ]
+                                                        }, void 0, true, {
+                                                            fileName: "[project]/app/Selection/page.tsx",
+                                                            lineNumber: 330,
+                                                            columnNumber: 49
+                                                        }, this),
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                            className: "jsx-7339ea23853c2e96" + " " + "text-[10px] font-bold text-slate-500 uppercase tracking-widest",
+                                                            children: "Model Accuracy"
+                                                        }, void 0, false, {
+                                                            fileName: "[project]/app/Selection/page.tsx",
+                                                            lineNumber: 331,
+                                                            columnNumber: 49
+                                                        }, this)
+                                                    ]
+                                                }, void 0, true) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Fragment"], {
+                                                    children: [
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                            className: "jsx-7339ea23853c2e96" + " " + "text-4xl font-black text-white",
+                                                            children: (results.r2_score || 0).toFixed(3)
+                                                        }, void 0, false, {
+                                                            fileName: "[project]/app/Selection/page.tsx",
+                                                            lineNumber: 335,
+                                                            columnNumber: 49
+                                                        }, this),
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                            className: "jsx-7339ea23853c2e96" + " " + "text-[10px] font-bold text-slate-500 uppercase tracking-widest",
+                                                            children: "R² Score"
+                                                        }, void 0, false, {
+                                                            fileName: "[project]/app/Selection/page.tsx",
+                                                            lineNumber: 336,
+                                                            columnNumber: 49
+                                                        }, this)
+                                                    ]
+                                                }, void 0, true)
+                                            }, void 0, false, {
+                                                fileName: "[project]/app/Selection/page.tsx",
+                                                lineNumber: 327,
+                                                columnNumber: 37
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "jsx-7339ea23853c2e96" + " " + "md:col-span-2 bg-slate-900/40 backdrop-blur-2xl border border-slate-800/50 rounded-3xl p-8",
+                                                children: [
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
+                                                        className: "jsx-7339ea23853c2e96" + " " + "text-xs font-black uppercase tracking-widest text-slate-500 mb-4",
+                                                        children: "Detailed Metrics"
+                                                    }, void 0, false, {
+                                                        fileName: "[project]/app/Selection/page.tsx",
+                                                        lineNumber: 343,
+                                                        columnNumber: 41
+                                                    }, this),
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                        className: "jsx-7339ea23853c2e96" + " " + "grid grid-cols-2 md:grid-cols-4 gap-4",
+                                                        children: results.accuracy ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Fragment"], {
+                                                            children: [
+                                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                    className: "jsx-7339ea23853c2e96" + " " + "text-center",
+                                                                    children: [
+                                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                            className: "jsx-7339ea23853c2e96" + " " + "text-xl font-bold",
+                                                                            children: (results.precision_macro || 0).toFixed(2)
+                                                                        }, void 0, false, {
+                                                                            fileName: "[project]/app/Selection/page.tsx",
+                                                                            lineNumber: 348,
+                                                                            columnNumber: 57
+                                                                        }, this),
+                                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                            className: "jsx-7339ea23853c2e96" + " " + "text-[8px] text-slate-500 uppercase",
+                                                                            children: "Precision"
+                                                                        }, void 0, false, {
+                                                                            fileName: "[project]/app/Selection/page.tsx",
+                                                                            lineNumber: 349,
+                                                                            columnNumber: 57
+                                                                        }, this)
+                                                                    ]
+                                                                }, void 0, true, {
+                                                                    fileName: "[project]/app/Selection/page.tsx",
+                                                                    lineNumber: 347,
+                                                                    columnNumber: 53
+                                                                }, this),
+                                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                    className: "jsx-7339ea23853c2e96" + " " + "text-center",
+                                                                    children: [
+                                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                            className: "jsx-7339ea23853c2e96" + " " + "text-xl font-bold",
+                                                                            children: (results.recall_macro || 0).toFixed(2)
+                                                                        }, void 0, false, {
+                                                                            fileName: "[project]/app/Selection/page.tsx",
+                                                                            lineNumber: 352,
+                                                                            columnNumber: 57
+                                                                        }, this),
+                                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                            className: "jsx-7339ea23853c2e96" + " " + "text-[8px] text-slate-500 uppercase",
+                                                                            children: "Recall"
+                                                                        }, void 0, false, {
+                                                                            fileName: "[project]/app/Selection/page.tsx",
+                                                                            lineNumber: 353,
+                                                                            columnNumber: 57
+                                                                        }, this)
+                                                                    ]
+                                                                }, void 0, true, {
+                                                                    fileName: "[project]/app/Selection/page.tsx",
+                                                                    lineNumber: 351,
+                                                                    columnNumber: 53
+                                                                }, this),
+                                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                    className: "jsx-7339ea23853c2e96" + " " + "text-center",
+                                                                    children: [
+                                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                            className: "jsx-7339ea23853c2e96" + " " + "text-xl font-bold",
+                                                                            children: (results.f1_macro || 0).toFixed(2)
+                                                                        }, void 0, false, {
+                                                                            fileName: "[project]/app/Selection/page.tsx",
+                                                                            lineNumber: 356,
+                                                                            columnNumber: 57
+                                                                        }, this),
+                                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                            className: "jsx-7339ea23853c2e96" + " " + "text-[8px] text-slate-500 uppercase",
+                                                                            children: "F1 Macro"
+                                                                        }, void 0, false, {
+                                                                            fileName: "[project]/app/Selection/page.tsx",
+                                                                            lineNumber: 357,
+                                                                            columnNumber: 57
+                                                                        }, this)
+                                                                    ]
+                                                                }, void 0, true, {
+                                                                    fileName: "[project]/app/Selection/page.tsx",
+                                                                    lineNumber: 355,
+                                                                    columnNumber: 53
+                                                                }, this),
+                                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                    className: "jsx-7339ea23853c2e96" + " " + "text-center",
+                                                                    children: [
+                                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                            className: "jsx-7339ea23853c2e96" + " " + "text-xl font-bold",
+                                                                            children: results.test_samples || "N/A"
+                                                                        }, void 0, false, {
+                                                                            fileName: "[project]/app/Selection/page.tsx",
+                                                                            lineNumber: 360,
+                                                                            columnNumber: 57
+                                                                        }, this),
+                                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                            className: "jsx-7339ea23853c2e96" + " " + "text-[8px] text-slate-500 uppercase",
+                                                                            children: "Samples"
+                                                                        }, void 0, false, {
+                                                                            fileName: "[project]/app/Selection/page.tsx",
+                                                                            lineNumber: 361,
+                                                                            columnNumber: 57
+                                                                        }, this)
+                                                                    ]
+                                                                }, void 0, true, {
+                                                                    fileName: "[project]/app/Selection/page.tsx",
+                                                                    lineNumber: 359,
+                                                                    columnNumber: 53
+                                                                }, this)
+                                                            ]
+                                                        }, void 0, true) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Fragment"], {
+                                                            children: [
+                                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                    className: "jsx-7339ea23853c2e96" + " " + "text-center",
+                                                                    children: [
+                                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                            className: "jsx-7339ea23853c2e96" + " " + "text-xl font-bold",
+                                                                            children: (results.mean_squared_error || 0).toFixed(4)
+                                                                        }, void 0, false, {
+                                                                            fileName: "[project]/app/Selection/page.tsx",
+                                                                            lineNumber: 367,
+                                                                            columnNumber: 57
+                                                                        }, this),
+                                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                            className: "jsx-7339ea23853c2e96" + " " + "text-[8px] text-slate-500 uppercase",
+                                                                            children: "MSE"
+                                                                        }, void 0, false, {
+                                                                            fileName: "[project]/app/Selection/page.tsx",
+                                                                            lineNumber: 368,
+                                                                            columnNumber: 57
+                                                                        }, this)
+                                                                    ]
+                                                                }, void 0, true, {
+                                                                    fileName: "[project]/app/Selection/page.tsx",
+                                                                    lineNumber: 366,
+                                                                    columnNumber: 53
+                                                                }, this),
+                                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                    className: "jsx-7339ea23853c2e96" + " " + "text-center",
+                                                                    children: [
+                                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                            className: "jsx-7339ea23853c2e96" + " " + "text-xl font-bold",
+                                                                            children: (results.mean_absolute_error || 0).toFixed(4)
+                                                                        }, void 0, false, {
+                                                                            fileName: "[project]/app/Selection/page.tsx",
+                                                                            lineNumber: 371,
+                                                                            columnNumber: 57
+                                                                        }, this),
+                                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                            className: "jsx-7339ea23853c2e96" + " " + "text-[8px] text-slate-500 uppercase",
+                                                                            children: "MAE"
+                                                                        }, void 0, false, {
+                                                                            fileName: "[project]/app/Selection/page.tsx",
+                                                                            lineNumber: 372,
+                                                                            columnNumber: 57
+                                                                        }, this)
+                                                                    ]
+                                                                }, void 0, true, {
+                                                                    fileName: "[project]/app/Selection/page.tsx",
+                                                                    lineNumber: 370,
+                                                                    columnNumber: 53
+                                                                }, this),
+                                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                    className: "jsx-7339ea23853c2e96" + " " + "text-center",
+                                                                    children: [
+                                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                            className: "jsx-7339ea23853c2e96" + " " + "text-xl font-bold",
+                                                                            children: (results.rmse || 0).toFixed(4)
+                                                                        }, void 0, false, {
+                                                                            fileName: "[project]/app/Selection/page.tsx",
+                                                                            lineNumber: 375,
+                                                                            columnNumber: 57
+                                                                        }, this),
+                                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                            className: "jsx-7339ea23853c2e96" + " " + "text-[8px] text-slate-500 uppercase",
+                                                                            children: "RMSE"
+                                                                        }, void 0, false, {
+                                                                            fileName: "[project]/app/Selection/page.tsx",
+                                                                            lineNumber: 376,
+                                                                            columnNumber: 57
+                                                                        }, this)
+                                                                    ]
+                                                                }, void 0, true, {
+                                                                    fileName: "[project]/app/Selection/page.tsx",
+                                                                    lineNumber: 374,
+                                                                    columnNumber: 53
+                                                                }, this),
+                                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                    className: "jsx-7339ea23853c2e96" + " " + "text-center",
+                                                                    children: [
+                                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                            className: "jsx-7339ea23853c2e96" + " " + "text-xl font-bold",
+                                                                            children: results.test_samples || "N/A"
+                                                                        }, void 0, false, {
+                                                                            fileName: "[project]/app/Selection/page.tsx",
+                                                                            lineNumber: 379,
+                                                                            columnNumber: 57
+                                                                        }, this),
+                                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                            className: "jsx-7339ea23853c2e96" + " " + "text-[8px] text-slate-500 uppercase",
+                                                                            children: "Samples"
+                                                                        }, void 0, false, {
+                                                                            fileName: "[project]/app/Selection/page.tsx",
+                                                                            lineNumber: 380,
+                                                                            columnNumber: 57
+                                                                        }, this)
+                                                                    ]
+                                                                }, void 0, true, {
+                                                                    fileName: "[project]/app/Selection/page.tsx",
+                                                                    lineNumber: 378,
+                                                                    columnNumber: 53
+                                                                }, this)
+                                                            ]
+                                                        }, void 0, true)
+                                                    }, void 0, false, {
+                                                        fileName: "[project]/app/Selection/page.tsx",
+                                                        lineNumber: 344,
+                                                        columnNumber: 41
+                                                    }, this)
+                                                ]
+                                            }, void 0, true, {
+                                                fileName: "[project]/app/Selection/page.tsx",
+                                                lineNumber: 342,
+                                                columnNumber: 37
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "jsx-7339ea23853c2e96" + " " + "md:col-span-3 bg-gradient-to-r from-blue-600/10 to-indigo-600/10 border border-blue-500/20 rounded-3xl p-8",
+                                                children: [
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                        className: "jsx-7339ea23853c2e96" + " " + "flex items-center gap-3 mb-6",
+                                                        children: [
+                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                className: "jsx-7339ea23853c2e96" + " " + "w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center shadow-lg",
+                                                                children: "🤖"
+                                                            }, void 0, false, {
+                                                                fileName: "[project]/app/Selection/page.tsx",
+                                                                lineNumber: 390,
+                                                                columnNumber: 45
+                                                            }, this),
+                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                className: "jsx-7339ea23853c2e96",
+                                                                children: [
+                                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
+                                                                        className: "jsx-7339ea23853c2e96" + " " + "text-lg font-black text-white tracking-tight",
+                                                                        children: "AI Expert Synthesis"
+                                                                    }, void 0, false, {
+                                                                        fileName: "[project]/app/Selection/page.tsx",
+                                                                        lineNumber: 392,
+                                                                        columnNumber: 49
+                                                                    }, this),
+                                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                                                        className: "jsx-7339ea23853c2e96" + " " + "text-[10px] font-bold text-slate-500 uppercase tracking-widest",
+                                                                        children: "Powered by Gemini AI"
+                                                                    }, void 0, false, {
+                                                                        fileName: "[project]/app/Selection/page.tsx",
+                                                                        lineNumber: 393,
+                                                                        columnNumber: 49
+                                                                    }, this)
+                                                                ]
+                                                            }, void 0, true, {
+                                                                fileName: "[project]/app/Selection/page.tsx",
+                                                                lineNumber: 391,
+                                                                columnNumber: 45
+                                                            }, this)
+                                                        ]
+                                                    }, void 0, true, {
+                                                        fileName: "[project]/app/Selection/page.tsx",
+                                                        lineNumber: 389,
+                                                        columnNumber: 41
+                                                    }, this),
+                                                    analysisLoading ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                        className: "jsx-7339ea23853c2e96" + " " + "animate-pulse text-sm text-slate-400 uppercase tracking-widest",
+                                                        children: "Analyzing dataset variance..."
+                                                    }, void 0, false, {
+                                                        fileName: "[project]/app/Selection/page.tsx",
+                                                        lineNumber: 397,
+                                                        columnNumber: 45
+                                                    }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                        className: "jsx-7339ea23853c2e96" + " " + "prose prose-invert prose-sm max-w-none text-slate-300 whitespace-pre-wrap",
+                                                        children: analysisText || "Waiting for synthesis..."
+                                                    }, void 0, false, {
+                                                        fileName: "[project]/app/Selection/page.tsx",
+                                                        lineNumber: 399,
+                                                        columnNumber: 45
+                                                    }, this)
+                                                ]
+                                            }, void 0, true, {
+                                                fileName: "[project]/app/Selection/page.tsx",
+                                                lineNumber: 388,
+                                                columnNumber: 37
+                                            }, this),
+                                            generatedCode && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "jsx-7339ea23853c2e96" + " " + "md:col-span-3 bg-slate-900/60 border border-slate-800 rounded-3xl p-8 overflow-hidden",
+                                                children: [
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                        className: "jsx-7339ea23853c2e96" + " " + "flex items-center gap-3 mb-6",
+                                                        children: [
+                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                className: "jsx-7339ea23853c2e96" + " " + "w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center shadow-lg",
+                                                                children: "💻"
+                                                            }, void 0, false, {
+                                                                fileName: "[project]/app/Selection/page.tsx",
+                                                                lineNumber: 409,
+                                                                columnNumber: 49
+                                                            }, this),
+                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                className: "jsx-7339ea23853c2e96",
+                                                                children: [
+                                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
+                                                                        className: "jsx-7339ea23853c2e96" + " " + "text-lg font-black text-white tracking-tight",
+                                                                        children: "Generated SageMaker Code"
+                                                                    }, void 0, false, {
+                                                                        fileName: "[project]/app/Selection/page.tsx",
+                                                                        lineNumber: 411,
+                                                                        columnNumber: 53
+                                                                    }, this),
+                                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                                                        className: "jsx-7339ea23853c2e96" + " " + "text-[10px] font-bold text-slate-500 uppercase tracking-widest",
+                                                                        children: "Dynamic Script"
+                                                                    }, void 0, false, {
+                                                                        fileName: "[project]/app/Selection/page.tsx",
+                                                                        lineNumber: 412,
+                                                                        columnNumber: 53
+                                                                    }, this)
+                                                                ]
+                                                            }, void 0, true, {
+                                                                fileName: "[project]/app/Selection/page.tsx",
+                                                                lineNumber: 410,
+                                                                columnNumber: 49
+                                                            }, this)
+                                                        ]
+                                                    }, void 0, true, {
+                                                        fileName: "[project]/app/Selection/page.tsx",
+                                                        lineNumber: 408,
+                                                        columnNumber: 45
+                                                    }, this),
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                        className: "jsx-7339ea23853c2e96" + " " + "bg-[#0f172a] rounded-xl p-6 overflow-x-auto",
+                                                        children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("pre", {
+                                                            className: "jsx-7339ea23853c2e96" + " " + "text-xs text-blue-300 font-mono",
+                                                            children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("code", {
+                                                                className: "jsx-7339ea23853c2e96",
+                                                                children: generatedCode
+                                                            }, void 0, false, {
+                                                                fileName: "[project]/app/Selection/page.tsx",
+                                                                lineNumber: 417,
+                                                                columnNumber: 53
+                                                            }, this)
+                                                        }, void 0, false, {
+                                                            fileName: "[project]/app/Selection/page.tsx",
+                                                            lineNumber: 416,
+                                                            columnNumber: 49
+                                                        }, this)
+                                                    }, void 0, false, {
+                                                        fileName: "[project]/app/Selection/page.tsx",
+                                                        lineNumber: 415,
+                                                        columnNumber: 45
+                                                    }, this)
+                                                ]
+                                            }, void 0, true, {
+                                                fileName: "[project]/app/Selection/page.tsx",
+                                                lineNumber: 407,
+                                                columnNumber: 41
+                                            }, this)
+                                        ]
+                                    }, void 0, true, {
+                                        fileName: "[project]/app/Selection/page.tsx",
+                                        lineNumber: 325,
+                                        columnNumber: 33
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "jsx-7339ea23853c2e96" + " " + "flex gap-4 justify-center",
+                                        children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                                onClick: ()=>{
+                                                    localStorage.removeItem("trainingStarted");
+                                                    setResults(null);
+                                                    setAnalysisText(null);
+                                                    setTrainingStarted(false);
+                                                    window.location.reload();
+                                                },
+                                                className: "jsx-7339ea23853c2e96" + " " + "px-8 py-3 bg-white text-slate-950 text-xs font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-all",
+                                                children: "New Pipeline"
+                                            }, void 0, false, {
+                                                fileName: "[project]/app/Selection/page.tsx",
+                                                lineNumber: 425,
+                                                columnNumber: 37
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                                onClick: ()=>checkOnce(),
+                                                className: "jsx-7339ea23853c2e96" + " " + "px-8 py-3 bg-blue-600 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-all",
+                                                children: "Refresh Metrics"
+                                            }, void 0, false, {
+                                                fileName: "[project]/app/Selection/page.tsx",
+                                                lineNumber: 437,
+                                                columnNumber: 37
+                                            }, this)
+                                        ]
+                                    }, void 0, true, {
+                                        fileName: "[project]/app/Selection/page.tsx",
+                                        lineNumber: 424,
+                                        columnNumber: 33
+                                    }, this)
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/app/Selection/page.tsx",
+                                lineNumber: 324,
+                                columnNumber: 29
+                            }, this)
+                        ]
+                    }, void 0, true, {
+                        fileName: "[project]/app/Selection/page.tsx",
+                        lineNumber: 281,
                         columnNumber: 21
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/Selection/page.tsx",
-                lineNumber: 87,
+                lineNumber: 167,
                 columnNumber: 13
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$styled$2d$jsx$2f$style$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
-                id: "9a80317c69fca349",
+                id: "7339ea23853c2e96",
                 children: "@keyframes shimmer{to{transform:translate(100%)}}"
             }, void 0, false, void 0, this)
         ]
     }, void 0, true, {
         fileName: "[project]/app/Selection/page.tsx",
-        lineNumber: 81,
+        lineNumber: 163,
         columnNumber: 9
     }, this);
 }
-_s(DatasetPage, "7f7ganNJJWU9VDjcYs1TGG7Te0s=");
+_s(DatasetPage, "tOCQXuBW9QLecs0L1cIwbG0G/M8=");
 _c = DatasetPage;
 var _c;
 __turbopack_context__.k.register(_c, "DatasetPage");

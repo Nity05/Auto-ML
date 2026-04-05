@@ -3,7 +3,7 @@ import os
 import json
 import tarfile
 import shutil
-from dataset_manager import detect_target_from_s3
+from dataset_manager import detect_target
 
 s3 = boto3.client("s3")
 
@@ -69,10 +69,14 @@ def upload_data_code(bucket, prefix, data_dir="runs/run_001"):
             os.remove(tar_path)
 import pandas as pd
 
-def create_context(s3_path: str, task: str, user_target: str | None):
-    df = pd.read_csv(s3_path)
-
-    detected_target = detect_target_from_s3(s3_path, task)
+def create_context(local_path: str, s3_path: str, task: str, user_target: str | None, bucket: str):
+    """
+    Creates context by reading the local CSV file.
+    """
+    df = pd.read_csv(local_path)
+    
+    # Still use the S3 path for the context metadata
+    detected_target = detect_target(local_path, task)
 
     target = detected_target if detected_target else user_target
 
@@ -84,6 +88,7 @@ def create_context(s3_path: str, task: str, user_target: str | None):
 
     context = {
         "dataset_path": s3_path,
+        "filename": os.path.basename(local_path),
         "task": task,
         "rows": len(df),
         "columns": df.columns.tolist(),
@@ -92,7 +97,8 @@ def create_context(s3_path: str, task: str, user_target: str | None):
         "categorical_features": [],
         "missing_values": {},
         "target": target,
-        "target_source": "auto" if detected_target else "user"
+        "target_source": "auto" if detected_target else "user",
+        "bucket": bucket
     }
 
     for col in df.columns:

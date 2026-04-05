@@ -1,4 +1,5 @@
 import os
+import shutil
 from kaggle.api.kaggle_api_extended import KaggleApi
 
 api = KaggleApi()
@@ -6,9 +7,11 @@ api.authenticate()
 
 def download_kaggle_dataset(dataset_ref: str):
     """
-    Downloads and unzips a Kaggle dataset locally
+    Downloads and unzips a Kaggle dataset locally, clearing old data first
     """
     base_dir = "data"
+    if os.path.exists(base_dir):
+        shutil.rmtree(base_dir)
     os.makedirs(base_dir, exist_ok=True)
 
     api.dataset_download_files(
@@ -32,11 +35,11 @@ def find_csv_files(root_dir):
     return csv_files
 import pandas as pd
 
-def detect_target_from_s3(s3_path: str, task: str):
+def detect_target(local_path: str, task: str):
     """
-    Try to infer target column using simple EDA rules
+    Try to infer target column using simple EDA rules on the local file
     """
-    df = pd.read_csv(s3_path)
+    df = pd.read_csv(local_path)
 
     # Common target names (priority)
     COMMON_TARGETS = [

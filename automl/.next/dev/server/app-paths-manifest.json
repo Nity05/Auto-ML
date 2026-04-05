@@ -3,5 +3,5 @@
   "/Selection/page": "app/Selection/page.js",
   "/api/datasets/search/route": "app/api/datasets/search/route.js",
   "/api/datasets/select/route": "app/api/datasets/select/route.js",
-  "/page": "app/page.js"
+  "/api/results/route": "app/api/results/route.js"
 }
